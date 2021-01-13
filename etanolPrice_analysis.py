@@ -93,6 +93,38 @@ print('Mostrando as 10 primeiras diferenciações')
 print(treino['Preço R$'].diff().dropna().head(10))
 
 # Adfuller Test For Diff series
-adfuller = adfuller_test(treino['Preço R$'].diff().dropna(
+adfuller1 = adfuller_test(treino['Preço R$'].diff().dropna(
 ), plot=True, title='Preços do Etanol com primeira diferenciação')
-print(adfuller)
+print(adfuller1)
+
+# Inflation Price adjust !Important for prices
+infl = pd.read_excel('IPCA.xls', sheet_name='IPCA')
+infl['Data'] = pd.to_datetime(infl['Data'])
+infl.set_index('Data', inplace=True)
+print(infl.head(-10))
+infl['Acumulado'] = pd.to_numeric(infl['Acumulado'])
+inf_actual = infl.loc[infl.index.max()]
+inf_actual = inf_actual['Acumulado']
+# Creating New columns in training DB for the Month and Year
+treino['Ano'] = treino.index.year
+treino['Mês'] = treino.index.month
+index = treino.index
+print(treino.head(10))
+
+# Merge Inflation DataFrame Into Training DB
+treino = treino.merge(
+    infl.loc[:, ['Ano', 'Mês', 'Acumulado']], how='left', on=['Ano', 'Mês'])
+treino['Preço Ajustado'] = (
+    treino['Preço R$']/treino['Acumulado']) * inf_actual
+treino.set_index(index, inplace=True)
+treino.dropna(inplace=True)
+print(treino.loc[:, ['Preço R$',
+                     'Acumulado', 'Preço Ajustado']].head())
+adfuller2 = adfuller_test(treino.loc[:, 'Preço Ajustado'], plot=True,
+                          title='Preço do Etanol ajustado pelo IPCA')
+print(adfuller2)
+treino.loc[:, ['Preço R$', 'Preço Ajustado']].plot(
+    figsize=(18, 5), title='Preços Etanol - Original x Ajustado Inflação')
+# # The ylim() function in pyplot module of matplotlib library is used to get or set the y-limits of the current axes.
+plt.ylim([0, 2700])
+plt.show()
