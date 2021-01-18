@@ -12,6 +12,8 @@ from statsmodels.tsa.stattools import adfuller, kpss
 from statsmodels.tsa.seasonal import seasonal_decompose
 import math
 from sklearn.metrics import mean_squared_error, mean_absolute_error
+from statsmodels.tsa.holtwinters import ExponentialSmoothing
+from statsmodels.tsa.arima_model import ARMA
 
 # https://docs.oracle.com/cd/E16582_01/doc.91/e15111/und_forecast_levels_methods.htm#EOAFM00004
 
@@ -173,4 +175,69 @@ for t in range(len(mm_teste)):
 mm_teste['Previsão'] = prev
 errorPLot(mm_teste)
 erro_teste['Média Móvel'] = error_check(mm_teste['Real'], mm_teste['Previsão'])
-print(erro_teste.head(10))
+
+# Exp Moving Mean
+# Testing for Alpha
+mme = treino[['Preço Ajustado']]
+alpha_ = [0, 0.2, 1]
+for i, valor in enumerate(alpha_):
+    model = ExponentialSmoothing(
+        mme['Preço Ajustado']).fit(smoothing_level=valor)
+    mme['Alpha {}'.format(valor)] = model.predict(start=0, end=len(mme)-1)
+
+mme.plot(figsize=(18, 5), title='Vários valores de Alpha contra a série de treino')
+plt.show()
+# Model with 0.5 alpha Training DB
+mme_treino = treino[['Preço Ajustado']]
+mme_treino.columns = ['Real']
+alpha = 0.5
+modelo = ExponentialSmoothing(mme_treino['Real']).fit(smoothing_level=alpha)
+mme_treino['Previsão'] = modelo.predict(start=0, end=len(mme_treino)-1)
+erro_treino['Média Móvel Exp'] = error_check(
+    mme_treino['Real'], mme_treino['Previsão'])
+# Model with Testing DB
+mme_teste = teste[['Preço R$']]
+mme_teste.columns = ['Real']
+print(mme_treino.head(10))
+hist = [mme_treino.iloc[i, 0] for i in range(len(mme_treino))]
+hist_prev = [mme_treino.iloc[i, 1] for i in range(len(mme_treino))]
+prev = []
+for t in range(len(mme_teste)):
+    yhat = hist_prev[-1] + alpha * (hist[-1] - hist_prev[-1])
+    obs = mme_teste.iloc[t, 0]
+    prev.append(yhat)
+    hist.append(obs)
+    hist_prev.append(yhat)
+
+mme_teste['Previsão'] = prev
+
+erro_teste['Média Móvel Exp'] = error_check(
+    mme_teste['Real'], mme_teste['Previsão'])
+errorPLot(mme_teste)
+
+
+# Regressive model
+plot_acf(treino['Preço Ajustado'], lags=60, zero=False)
+plot_pacf(treino['Preço Ajustado'], lags=60, zero=False)
+# Model in Training DB
+ar_treino = treino[['Preço Ajustado']]
+ar_treino.columns = ['Real']
+modelo = ARMA(ar_treino['Real'], order=[2, 0]).fit()
+ar_treino['Previsão'] = modelo.predict(start=0, end=len(ar_treino)-1)
+erro_treino['ARMA'] = error_check(ar_treino['Real'], ar_treino['Previsão'])
+# Model in Testing DB
+ar_teste = teste[['Preço R$']]
+ar_teste.columns = ['Real']
+print(modelo.arparams)
+coef_1, coef_2 = modelo.arparams
+hist = [ar_treino.iloc[i, 0] for i in range(len(ar_treino))]
+prev = []
+for t in range(len(ar_teste)):
+    yhat = (hist[-1]*coef_1)+(hist[-2]*coef_2)
+    obs = ar_teste.iloc[t, 0]
+    prev.append(yhat)
+    hist.append(obs)
+
+ar_teste['Previsão'] = prev
+errorPLot(ar_teste)
+erro_teste['ARMA'] = error_check(ar_teste['Real'], ar_teste['Previsão'])
