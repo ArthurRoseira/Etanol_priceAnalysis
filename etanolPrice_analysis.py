@@ -1,3 +1,4 @@
+from scipy.stats import boxcox
 import os
 import pandas as pd
 import numpy as np
@@ -10,6 +11,9 @@ from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 from statsmodels.tsa.stattools import adfuller, kpss
 from statsmodels.tsa.seasonal import seasonal_decompose
 import math
+from sklearn.metrics import mean_squared_error, mean_absolute_error
+# import ipywidgets as widgets
+# from ipywidgets import interactive
 
 # https://nbviewer.jupyter.org/github/leandrovrabelo/tsmodels/blob/master/notebooks/portugues/Princi%CC%81pios%20Ba%CC%81sicos%20para%20Prever%20Se%CC%81ries%20Temporais.ipynb
 
@@ -25,6 +29,47 @@ def adfuller_test(serie, figsize=(18, 4), plot=True, title=''):
     for key, value in adf[4].items():
         output["Valores Críticos (%s)" % key] = value.round(4)
     return output
+
+
+def error_check(orig, prev, nome_col='', nome_indice=''):
+    vies = np.mean(orig - prev)
+    mse = mean_squared_error(orig, prev)
+    rmse = math.sqrt(mean_squared_error(orig, prev))
+    mae = mean_absolute_error(orig, prev)
+    mape = np.mean(np.abs((orig-prev)/orig))*100
+    grupo_erro = [vies, mse, rmse, mae, mape]
+    serie = pd.DataFrame(grupo_erro, index=[
+        'VIÉS', 'MSE', 'RMSE', 'MAE', 'MAPE'], columns=[nome_col])
+    serie.index.name = nome_indice
+    return serie
+
+
+def errorPLot(dados, figsize=(18, 8)):
+    dados['Erro'] = dados.iloc[:, 0] - dados.iloc[:, 1]
+    plt.figure(figsize=figsize)
+    ax1 = plt.subplot2grid((2, 2), (0, 0))
+    ax2 = plt.subplot2grid((2, 2), (0, 1))
+    ax3 = plt.subplot2grid((2, 2), (1, 0))
+    ax4 = plt.subplot2grid((2, 2), (1, 1))
+
+    # Graph real x prev
+    ax1.plot(dados.iloc[:, 0:2])
+    ax1.legend(['Real', 'Prev'])
+    ax1.set_title('Valores Reais vs Previstos')
+
+    # Error x Prev
+    ax2.scatter(dados.iloc[:, 1], dados.iloc[:, 2])
+    ax2.set_xlabel('Valores Previstos')
+    ax2.set_ylabel('Resíduo')
+    ax2.set_title('Resíduo vs Valores Previstos')
+
+    # QQ Plot
+    sm.graphics.qqplot(dados.iloc[:, 2], line='r', ax=ax3)
+
+    # Graph correlation
+    plot_acf(dados.iloc[:, 2], lags=60, zero=False, ax=ax4)
+    plt.tight_layout()
+    plt.show()
 
 
 os.chdir('C:\\Users\\arthu\\OneDrive\\Ambiente de Trabalho\\Projects\\Python\\DataSeries\\Etanol- Esalq\\Etanol_priceAnalysis')
@@ -127,4 +172,66 @@ treino.loc[:, ['Preço R$', 'Preço Ajustado']].plot(
     figsize=(18, 5), title='Preços Etanol - Original x Ajustado Inflação')
 # # The ylim() function in pyplot module of matplotlib library is used to get or set the y-limits of the current axes.
 plt.ylim([0, 2700])
+plt.show()
+
+# Price adjust to lower the variance
+plt.figure(figsize=(18, 4))
+plt.subplot(121)  # Sames as Matlab
+plt.plot(treino['Preço Ajustado'])
+plt.title('Serie Original')
+# Using LN transformation
+log = np.log(treino['Preço Ajustado'])
+plt.subplot(122)
+plt.plot(log)
+plt.title('Série transformada pelo Log Natural')
+plt.tight_layout()
+plt.show()
+
+# Box Cox Transformation
+plt.figure(figsize=(18, 5))
+plt.subplot(221)
+plt.plot(treino['Preço Ajustado'])
+
+plt.subplot(222)
+plt.hist(treino['Preço Ajustado'])
+plt.title('Distribuição da Serie Original')
+
+treino['BOXCOX'], lmda_ = boxcox(treino['Preço Ajustado'])
+print('Valor de Lambda:{}'.format(lmda_))
+plt.subplot(223)
+plt.plot(treino["BOXCOX"], color='green')
+plt.title('Serie Transformada')
+
+plt.subplot(224)
+plt.hist(treino['BOXCOX'], color='green')
+plt.title('Distribuição da Serie Transformada')
+plt.tight_layout()
+plt.show()
+
+# Interactive graph to dinamically change lambda while see data
+
+
+# def f(lmbda):
+#     pl.figure(figsize=(18, 4))
+#     if lmda == 0:
+#         treino['Box Cox'] = np.log(treino['Preço R$'])
+#     else:
+#         treino['Box Cox'] = (treino['Preço R$']**lmbda - 1)/lmbda
+#     plt.plot(treino["Box Plot"])
+#     plt.title('Transformação de Box Cox com Lambda de {}'.format(lmbda))
+#     plt.show()
+
+
+# interactive_plot = interactive(f, lmbda=(-5, 5, 0.5))
+# interactive_plot
+# Autocorrelations Plots
+# Non Stationary Series
+plot_acf(treino['Preço R$'], lags=60, zero=False)
+plt.show()
+plot_pacf(treino['Preço R$'], lags=60, zero=False)
+plt.show()
+# Stationary Series
+plot_acf(treino['Preço Ajustado'], lags=60, zero=False)
+plt.show()
+plot_pacf(treino['Preço Ajustado'], lags=60, zero=False)
 plt.show()
